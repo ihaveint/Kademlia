@@ -82,8 +82,7 @@ defmodule Knode do
         end
     end
     
-
-    new_state = %{id: id, k_buckets: updated_buckets}
+    %{state | k_buckets: updated_buckets}
   end
 
   @spec loop(__MODULE__) :: any
@@ -114,8 +113,8 @@ defmodule Knode do
     end
   end
 
-  def store(key, value) do
-    # TODO
+  def store(key, value, state = %{data: data}) do
+    %{state | data: %{data | key => value}}
   end
 
   def find_node(target_id) do
