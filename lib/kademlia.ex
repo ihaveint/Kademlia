@@ -26,7 +26,7 @@ defmodule Kademlia.API do
   end
 
   def find_value(node_pid, key) do
-    send(node_pid, {:request, {:find_value, self(), key}})
+    send(node_pid, {:find_value, self(), key})
 
     receive do
       response -> response

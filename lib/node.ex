@@ -181,18 +181,26 @@ defmodule Knode do
     state
   end
 
-  def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, id}}, state = %{id: id}) do
-    data = Map.get(state, :data)
-    value = Map.get(data, id)
-    send(from, value)
-    state |> update_buckets(initiator)
-  end
-
-  def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, key}}, state) do
+  def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, key}}, state = %{data: data, k_buckets: buckets}) do
     pid = self()
     spawn(fn ->
-      value = find_value(pid, key, state)
-      send(from, value)
+      result = case Map.get(data, key) do
+        nil ->
+          k_closests =
+            Enum.map(buckets, fn bucket ->
+              bucket |> Enum.map(fn node = {_node_pid, node_id} ->
+                {bxor(node_id, key), node}
+              end)
+            end)
+            |> List.flatten
+            |> Enum.sort()
+            |> Enum.uniq
+            |> Enum.take(@k)
+            |> Enum.map(fn {_distance, node} -> node end)
+
+        value -> value
+      end
+      send(from, result)
     end)
     state |> update_buckets(initiator)
   end

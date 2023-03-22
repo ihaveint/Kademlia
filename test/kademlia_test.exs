@@ -36,7 +36,7 @@ defmodule FindValueTest do
     assert Enum.member?(k_neighbors, {node2, 2})
   end
 
-  @tag mustexec: true
+  # @tag mustexec: true
   test "Finding a node in a network of hundreds of nodes works" do
     nodes = Enum.map(1..10, fn id ->
       {Kademlia.API.new_node(id), id}
@@ -74,7 +74,20 @@ defmodule FindValueTest do
     assert Enum.member?(discovery_enum, false) == false
   end
 
+  @tag mustexec: true
   test "Finding a value after saving it on another node" do
-    assert true
+    node1 = Kademlia.API.new_node(1)
+    node2 = Kademlia.API.new_node(2)
+
+    Kademlia.API.join(node2, {node1, 1})
+
+    Kademlia.API.store(node1, {1 <<< 3, 5})
+
+    case Kademlia.API.find_value(node2, 8) do
+      5 -> assert true
+      sth_else ->
+        IO.inspect(sth_else, label: "oops, got")
+        assert false
+    end
   end
 end
