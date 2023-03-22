@@ -38,7 +38,7 @@ defmodule FindValueTest do
 
   # @tag mustexec: true
   test "Finding a node in a network of hundreds of nodes works" do
-    nodes = Enum.map(1..10, fn id ->
+    nodes = Enum.map(1..20, fn id ->
       {Kademlia.API.new_node(id), id}
     end)
 
@@ -89,5 +89,36 @@ defmodule FindValueTest do
         IO.inspect(sth_else, label: "oops, got")
         assert false
     end
+  end
+
+  test "Finding a value in a random generated network works" do
+    nodes = Enum.map(1..20, fn id ->
+      {Kademlia.API.new_node(id), id}
+    end)
+
+    [first_node | rest] = nodes
+
+    Enum.reduce(
+      rest,
+      [first_node], fn node = {node_pid, _node_id}, network_nodes ->
+      random_connection = {_random_node_pid, _random_node_id} = Enum.random(network_nodes)
+      Kademlia.API.join(node_pid, random_connection)
+      [node | network_nodes]
+    end)
+
+    {first_node_pid, _first_node_id} = first_node
+    Kademlia.API.store(first_node_pid, {8, 5})
+
+    discovery_enum =
+      Enum.map(1..10, fn _ ->
+          {random_node_pid, _random_node_id} = Enum.random(nodes)
+
+          case Kademlia.API.find_value(random_node_pid, 8) do
+            nil -> false
+            _ -> true
+          end
+      end)
+
+    assert Enum.member?(discovery_enum, false) == false
   end
 end

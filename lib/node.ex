@@ -57,8 +57,7 @@ defmodule Knode do
         if Enum.count(Enum.at(buckets, bucket_id)) == @k do
           [least_recently_seen | _t] = Enum.at(buckets, bucket_id)
           _updated_buckets = 
-            #case ping(least_recently_seen, id) do
-            case :alive do
+            case ping(least_recently_seen, id) do
               :alive ->
                 send_to_front(buckets, bucket_id, least_recently_seen)
               :presume_dead ->
@@ -182,11 +181,10 @@ defmodule Knode do
   end
 
   def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, key}}, state = %{data: data, k_buckets: buckets}) do
-    pid = self()
     spawn(fn ->
       result = case Map.get(data, key) do
         nil ->
-          k_closests =
+          _k_closests =
             Enum.map(buckets, fn bucket ->
               bucket |> Enum.map(fn node = {_node_pid, node_id} ->
                 {bxor(node_id, key), node}
@@ -234,8 +232,8 @@ defmodule Knode do
     end
   end
 
-  def ping_and_wait(node, parent) do
-    send(node, {:request, {:rpc_ping, parent}})
+  def ping_and_wait({node_pid, _node_id}, parent) do
+    send(node_pid, {:request, {:rpc_ping, parent}})
 
     receive do
       :alive ->
