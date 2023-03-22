@@ -3,6 +3,7 @@ defmodule Knode do
 
   @k 20
   @a 10
+  @timeout 100
 
   @type node_id :: integer
   @type node_pid :: Node.t
@@ -212,7 +213,7 @@ defmodule Knode do
       :alive ->
         send(parent, :ok)
     after
-      100 ->
+      @timeout ->
         send(parent, :presume_dead)
     end
   end
@@ -242,7 +243,7 @@ defmodule Knode do
            send(initiator_pid, {:reply, node, value})
            [{:terminate, value}]
       after
-        100 ->
+        @timeout ->
           :remove
       end
     end)
@@ -292,7 +293,7 @@ defmodule Knode do
               send(initiator_pid, {:reply, node, value})
               {:terminate, value}
           after
-            100 ->
+            @timeout ->
               :remove
           end
         end)
@@ -351,7 +352,7 @@ defmodule Knode do
            send(initiator_pid, {:reply, node, value})
            [{:terminate, value}]
        after
-         100 ->
+         @timeout ->
            :remove
        end
     end)
