@@ -95,9 +95,6 @@ defmodule Knode do
   @spec loop(__MODULE__) :: any
   def loop(state = %{id: id, k_buckets: buckets}) do
     receive do
-      {:debug, :k_buckets, from} ->
-        send(from, buckets)
-        loop(state)
       {:join, from, _contact_node = {contact_node_pid, contact_node_id}} ->
         new_state = update_buckets(state, {contact_node_pid, contact_node_id})
         lookup(self(), new_state, id)
@@ -118,9 +115,6 @@ defmodule Knode do
         else
           loop(state |> store(key, value))
         end
-      {:request, {:current_state, from}} ->
-        send(from, state)
-        loop(state)
       {:request, {:rpc_ping, {from, node_id}}} -> 
         send(from, :alive)
         loop(state |> update_buckets({from, node_id}))
@@ -391,12 +385,5 @@ defmodule Knode do
   def refresh(state, _bucket_id) do
     nil # TODO
     state
-  end
-
-  def get_state(node_pid) do
-    send(node_pid, {:request, {:current_state, self()}})
-    receive do
-      state -> state
-    end
   end
 end

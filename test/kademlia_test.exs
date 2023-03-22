@@ -43,12 +43,6 @@ defmodule FindValueTest do
       :joined -> nil
     end
 
-    send(node1, {:debug, :k_buckets, self()})
-
-    receive do
-      buckets -> buckets
-    end
-
     send(node1, {:find_node, self(), 2})
     k_neighbors =
     receive do
@@ -78,15 +72,6 @@ defmodule FindValueTest do
         [node | network_nodes]
       end)
 
-    Enum.map(nodes, fn {node_pid, _node_id} ->
-      send(node_pid, {:debug, :k_buckets, self()})
-      
-      receive do
-        buckets -> 
-          buckets 
-      end
-    end)
-
     discovery_enum =
       Enum.map(1..100, fn _ ->
       {random_node_pid, _random_node_id} = Enum.random(nodes)
@@ -107,8 +92,6 @@ defmodule FindValueTest do
     end)
 
     assert Enum.member?(discovery_enum, false) == false
-
-    #assert true
   end
 
   test "Finding a value after saving it on another node" do
