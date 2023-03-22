@@ -5,28 +5,20 @@ defmodule FindValueTest do
   import Bitwise
   
   test "Storing a value returns :ok" do
-    node1 = Knode.new_node(1)
+    node1 = Kademlia.API.new_node(1)
 
-    send(node1, {:request, {:store, self(), {1 <<< 3, 5}}})
-
-    receive do
+    case Kademlia.API.store(node1, {1 <<< 3, 5}) do
       :ok -> assert true
       _ -> assert false
     end
   end
 
   test "Finding a value after saving it on the same node" do
-    node1 = Knode.new_node(1)
+    node1 = Kademlia.API.new_node(1)
 
-    send(node1, {:request, {:store, self(), {1 <<< 3, 5}}})
+    Kademlia.API.store(node1, {1 <<< 3, 5})
 
-    receive do
-      _ -> true
-    end
-
-    send(node1, {:request, {:find_value, self(), 8}})
-
-    receive do
+    case Kademlia.API.find_value(node1, 8) do
       5 -> assert true
       _ -> assert false
     end
@@ -34,20 +26,12 @@ defmodule FindValueTest do
 
   #@tag mustexec: true
   test "Finding a node after connecting it to the network works" do
-    node1 = Knode.new_node(1)
-    node2 = Knode.new_node(2)
-    
-    send(node2, {:join, self(), {node1, 1}})
+    node1 = Kademlia.API.new_node(1)
+    node2 = Kademlia.API.new_node(2)
 
-    receive do
-      :joined -> nil
-    end
+    Kademlia.API.join(node2, {node1, 1})
 
-    send(node1, {:find_node, self(), 2})
-    k_neighbors =
-    receive do
-      x -> x
-    end
+    k_neighbors = Kademlia.API.find_node(node1, 2)
 
     assert Enum.member?(k_neighbors, {node2, 2})
   end
@@ -55,7 +39,7 @@ defmodule FindValueTest do
   @tag mustexec: true
   test "Finding a node in a network of hundreds of nodes works" do
     nodes = Enum.map(1..10, fn id ->
-      {Knode.new_node(id), id}
+      {Kademlia.API.new_node(id), id}
     end)
 
     [first_node | rest] = nodes
@@ -64,11 +48,7 @@ defmodule FindValueTest do
       rest,
       [first_node], fn node = {node_pid, _node_id}, network_nodes ->
         random_connection = {_random_node_pid, _random_node_id} = Enum.random(network_nodes)
-        send(node_pid, {:join, self(), random_connection})
-        receive do
-          :joined -> 
-            nil
-        end
+        Kademlia.API.join(node_pid, random_connection)
         [node | network_nodes]
       end)
 

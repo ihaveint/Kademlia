@@ -19,7 +19,6 @@ defmodule Knode do
     data: %{}
   )
 
-  @spec new_node(integer) :: node_pid
   def new_node(node_id) do
     state = %__MODULE__{
       id: node_id,
@@ -92,103 +91,130 @@ defmodule Knode do
     %{state | k_buckets: updated_buckets}
   end
 
+  def message_handler({:join, from, _contact_node = {contact_node_pid, contact_node_id}}, state = %{id: id}) do
+    new_state = update_buckets(state, {contact_node_pid, contact_node_id})
+    lookup(self(), new_state, id)
+    send(from, :joined)
+    new_state
+  end
+
+  def message_handler({:request, {:store, from, {key, value}}}, state = %{id: id}) do
+    k_closests = lookup(self(), state, key)
+    Enum.map(k_closests, fn {node_pid, _node_id} ->
+      send(node_pid, {:request, {:rpc_store, {self(), id}, key, value}})
+    end)
+
+    send(from, :ok)
+
+    state
+  end
+
+  def message_handler({:request, {:rpc_store, {from, node_id}, key, value}}, state = %{id: id}) do
+    if node_id != id do
+      state |> store(key, value) |> update_buckets({from, node_id})
+    else
+      state |> store(key, value)
+    end
+  end
+
+  def message_handler({:request, {:rpc_ping, {from, node_id}}}, state) do
+    send(from, :alive)
+    state |> update_buckets({from, node_id})
+  end
+
+  def message_handler({:request, {:rpc_find_node, from, initiator = {_initiator_pid, initiator_id}, target_id}}, state = %{id: id, k_buckets: buckets}) do
+    spawn(fn ->
+      k_closests =
+        Enum.map(buckets, fn bucket ->
+          bucket |> Enum.map(fn node = {_node_pid, node_id} ->
+            {bxor(node_id, target_id), node}
+          end)
+        end)
+        |> List.flatten
+        |> Enum.sort()
+        |> Enum.uniq
+        |> Enum.take(@k)
+        |> Enum.map(fn {_distance, node} -> node end)
+
+
+      send(from, k_closests)
+    end)
+
+    if initiator_id != id do
+      state |> update_buckets(initiator)
+    else
+      state
+    end
+  end
+
+  def message_handler({:lookup_node, from, target_id}, state) do
+    send(from, lookup_node(self(), state, target_id))
+    state
+  end
+
+  def message_handler({:find_node, from, target_id}, state = %{k_buckets: buckets}) do
+    spawn(fn ->
+      k_closests =
+        Enum.map(buckets, fn bucket ->
+          bucket |> Enum.map(fn node = {_node_pid, node_id} ->
+            {bxor(node_id, target_id), node}
+          end)
+        end)
+        |> List.flatten
+        |> Enum.sort()
+        |> Enum.uniq
+        |> Enum.take(@k)
+        |> Enum.map(fn {_distance, node} -> node end)
+
+
+      send(from, k_closests)
+    end)
+    state
+  end
+
+  def message_handler({:find_value, from, target_id}, state) do
+    pid = self()
+    spawn(fn ->
+      value = find_value(pid, target_id, state)
+      send(from, value)
+    end)
+    state
+  end
+
+  def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, id}}, state = %{id: id}) do
+    data = Map.get(state, :data)
+    value = Map.get(data, id)
+    send(from, value)
+    state |> update_buckets(initiator)
+  end
+
+  def message_handler({:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, key}}, state) do
+    pid = self()
+    spawn(fn ->
+      value = find_value(pid, key, state)
+      send(from, value)
+    end)
+    state |> update_buckets(initiator)
+  end
+
+  def message_handler({:request, {:find_value, from, key}}, state) do
+    pid = self()
+    spawn(fn ->
+      value = find_value(pid, key, state)
+      send(from, value)
+    end)
+    state
+  end
+
+  def message_handler({:reply, {from, node_id}, _}, state) do
+    state |> update_buckets({from, node_id})
+  end
+
   @spec loop(__MODULE__) :: any
-  def loop(state = %{id: id, k_buckets: buckets}) do
+  def loop(state) do
     receive do
-      {:join, from, _contact_node = {contact_node_pid, contact_node_id}} ->
-        new_state = update_buckets(state, {contact_node_pid, contact_node_id})
-        lookup(self(), new_state, id)
-        send(from, :joined)
-        loop(new_state)
-      {:request, {:store, from, {key, value}}} ->
-        k_closests = lookup(self(), state, key)
-        Enum.map(k_closests, fn {node_pid, _node_id} ->
-          send(node_pid, {:request, {:rpc_store, {self(), id}, key, value}})
-        end)
-
-        send(from, :ok)
-        
-        loop(state)
-      {:request, {:rpc_store, {from, node_id}, key, value}} -> 
-        if node_id != id do
-          loop(state |> store(key, value) |> update_buckets({from, node_id}))
-        else
-          loop(state |> store(key, value))
-        end
-      {:request, {:rpc_ping, {from, node_id}}} -> 
-        send(from, :alive)
-        loop(state |> update_buckets({from, node_id}))
-      {:request, {:rpc_find_node, from, initiator = {_initiator_pid, initiator_id}, target_id}} ->
-        spawn(fn ->
-          k_closests = 
-            Enum.map(buckets, fn bucket ->
-              bucket |> Enum.map(fn node = {_node_pid, node_id} ->
-                {bxor(node_id, target_id), node}
-              end)
-            end)
-            |> List.flatten
-            |> Enum.sort()
-            |> Enum.uniq
-            |> Enum.take(@k)
-            |> Enum.map(fn {_distance, node} -> node end)
-
-
-          send(from, k_closests)
-        end)
-
-        if initiator_id != id do
-          loop(state |> update_buckets(initiator))
-        else
-          loop(state)
-        end
-      {:lookup_node, from, target_id}  ->
-        send(from, lookup_node(self(), state, target_id))
-        loop(state)
-      {:find_node, from, target_id} ->
-        spawn(fn ->
-          k_closests = 
-            Enum.map(buckets, fn bucket ->
-              bucket |> Enum.map(fn node = {_node_pid, node_id} ->
-                {bxor(node_id, target_id), node}
-              end)
-            end)
-            |> List.flatten
-            |> Enum.sort()
-            |> Enum.uniq
-            |> Enum.take(@k)
-            |> Enum.map(fn {_distance, node} -> node end)
-
-
-          send(from, k_closests)
-        end)
-        loop(state)
-      {:find_value, from, target_id} ->
-        pid = self()
-        spawn(fn ->
-          value = find_value(pid, target_id, state)
-          send(from, value)
-        end)
-        loop(state)
-      {:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, ^id}} ->
-        data = Map.get(state, :data)
-        value = Map.get(data, id)
-        send(from, value)
-        loop(state |> update_buckets(initiator))
-      {:request, {:rpc_find_value, from, initiator = {_initiator_pid, _initiator_id}, key}} ->
-        pid = self()
-        spawn(fn ->
-          value = find_value(pid, key, state)
-          send(from, value)
-        end)
-        loop(state |> update_buckets(initiator))
-      {:request, {:find_value, from, key}} ->
-        pid = self()
-        spawn(fn ->
-          value = find_value(pid, key, state)
-          send(from, value)
-        end)
-        loop(state)
-      {:reply, {from, node_id}, _} -> loop(state |> update_buckets({from, node_id})) 
+      message ->
+        loop(message_handler(message, state))
     end
   end
 
