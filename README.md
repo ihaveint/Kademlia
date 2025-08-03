@@ -177,7 +177,3 @@ This implementation closely follows the original Kademlia paper with these chara
 ## References
 
 - [Kademlia: A Peer-to-peer Information System Based on the XOR Metric](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf) - Original paper by Petar Maymounkov and David Mazières
-
-## License
-
-[Add your license information here]
